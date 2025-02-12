@@ -80,7 +80,10 @@ func (r *IronicReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	cctx.VersionInfo = cctx.VersionInfo.WithIronicOverrides(ironicConf)
+	cctx.VersionInfo, err = cctx.VersionInfo.WithIronicOverrides(ironicConf)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	changed, err := r.handleIronic(cctx, ironicConf)
 	if err != nil {
@@ -116,7 +119,7 @@ func (r *IronicReconciler) handleIronic(cctx ironic.ControllerContext, ironicCon
 		return r.cleanUp(cctx, ironicConf)
 	}
 
-	actuallyRequestedVersion := cctx.VersionInfo.InstalledVersion
+	actuallyRequestedVersion := cctx.VersionInfo.InstalledVersion.String()
 	if actuallyRequestedVersion != ironicConf.Status.InstalledVersion && actuallyRequestedVersion != ironicConf.Status.RequestedVersion {
 		cctx.Logger.Info("new version requested", "InstalledVersion", ironicConf.Status.InstalledVersion, "RequestedVersion", actuallyRequestedVersion)
 		ironicConf.Status.RequestedVersion = actuallyRequestedVersion
@@ -146,7 +149,7 @@ func (r *IronicReconciler) handleIronic(cctx ironic.ControllerContext, ironicCon
 	newStatus.InstalledVersion = ""
 	requeue = setConditionsFromStatus(cctx, status, &newStatus.Conditions, ironicConf.Generation, "ironic")
 	if !requeue {
-		newStatus.InstalledVersion = cctx.VersionInfo.InstalledVersion
+		newStatus.InstalledVersion = cctx.VersionInfo.InstalledVersion.String()
 	}
 
 	if !apiequality.Semantic.DeepEqual(newStatus, &ironicConf.Status) {

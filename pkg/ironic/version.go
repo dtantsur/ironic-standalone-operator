@@ -6,16 +6,15 @@ import (
 	metal3api "github.com/metal3-io/ironic-standalone-operator/api/v1alpha1"
 )
 
-const (
-	// NOTE(dtantsur): defaultVersion must be updated after branching
-	defaultVersion  = metal3api.VersionLatest
-	defaultRegistry = "quay.io/metal3-io"
-)
+const defaultRegistry = "quay.io/metal3-io"
+
+// NOTE(dtantsur): DefaultVersion must be updated after branching
+var DefaultVersion = metal3api.VersionLatest
 
 var defaultMariaDBImage = fmt.Sprintf("%s/mariadb:latest", defaultRegistry)
 
 type VersionInfo struct {
-	InstalledVersion       string
+	InstalledVersion       metal3api.Version
 	IronicImage            string
 	MariaDBImage           string
 	RamdiskDownloaderImage string
@@ -25,7 +24,7 @@ type VersionInfo struct {
 }
 
 // Helper to build a VersionInfo object for a given version and tag.
-func buildVersionInfo(version string) VersionInfo {
+func buildVersionInfo(version metal3api.Version) VersionInfo {
 	tag := metal3api.SupportedVersions[version]
 	// NOTE(dtantsur): we don't have explicit support for IPA branches other than master yet.
 	return VersionInfo{
@@ -40,11 +39,13 @@ func buildVersionInfo(version string) VersionInfo {
 
 // Takes VersionInfo with defaults from the configuration and applies any overrides from the Ironic object.
 // Explicit images from the Images object take priority. Otherwise, the defaults are taken from the hardcoded defaults for the given version.
-func (versionInfo VersionInfo) WithIronicOverrides(ironic *metal3api.Ironic) VersionInfo {
+func (versionInfo VersionInfo) WithIronicOverrides(ironic *metal3api.Ironic) (VersionInfo, error) {
 	if ironic.Spec.Version != "" {
-		versionInfo.InstalledVersion = ironic.Spec.Version
-	} else if versionInfo.InstalledVersion == "" {
-		versionInfo.InstalledVersion = defaultVersion
+		parsedVersion, err := metal3api.ParseVersion(ironic.Spec.Version)
+		if err != nil {
+			return VersionInfo{}, err
+		}
+		versionInfo.InstalledVersion = parsedVersion
 	}
 
 	defaults := buildVersionInfo(versionInfo.InstalledVersion)
@@ -74,7 +75,7 @@ func (versionInfo VersionInfo) WithIronicOverrides(ironic *metal3api.Ironic) Ver
 		versionInfo.KeepalivedImage = defaults.KeepalivedImage
 	}
 
-	return versionInfo
+	return versionInfo, nil
 }
 
 // Takes VersionInfo with defaults from the configuration and applies any overrides from the IronicDatabase object.

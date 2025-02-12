@@ -220,14 +220,21 @@ func ValidateIronic(ironic *IronicSpec, old *IronicSpec) error {
 		return errors.New("highly available architecture is disabled via feature gate")
 	}
 
-	if ironic.Version != "" && SupportedVersions[ironic.Version] == "" {
-		var versions []string
-		for ver := range SupportedVersions {
-			versions = append(versions, ver)
+	if ironic.Version != "" {
+		parsedVersion, err := ParseVersion(ironic.Version)
+		if err != nil {
+			return err
 		}
-		slices.Sort(versions)
-		return fmt.Errorf("version %s is not supported, supported versions are %s",
-			ironic.Version, strings.Join(versions, ", "))
+
+		if SupportedVersions[parsedVersion] == "" {
+			var versions []string
+			for ver := range SupportedVersions {
+				versions = append(versions, ver.String())
+			}
+			slices.Sort(versions)
+			return fmt.Errorf("version %s is not supported, supported versions are %s",
+				ironic.Version, strings.Join(versions, ", "))
+		}
 	}
 
 	return nil

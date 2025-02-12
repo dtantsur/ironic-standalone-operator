@@ -22,7 +22,7 @@ func TestWithIronicOverrides(t *testing.T) {
 
 			Expected: VersionInfo{
 				// NOTE(dtantsur): this value will change on stable branches
-				InstalledVersion:       "latest",
+				InstalledVersion:       metal3api.MustParseVersion("latest"),
 				IronicImage:            "quay.io/metal3-io/ironic:latest",
 				KeepalivedImage:        "quay.io/metal3-io/keepalived:latest",
 				RamdiskDownloaderImage: "quay.io/metal3-io/ironic-ipa-downloader:latest",
@@ -45,7 +45,7 @@ func TestWithIronicOverrides(t *testing.T) {
 			Expected: VersionInfo{
 				AgentBranch: "stable/x.y",
 				// NOTE(dtantsur): this value will change on stable branches
-				InstalledVersion:       "latest",
+				InstalledVersion:       metal3api.MustParseVersion("latest"),
 				IronicImage:            "myorg/ironic:tag",
 				KeepalivedImage:        "myorg/keepalived:tag",
 				RamdiskDownloaderImage: "myorg/ramdisk-downloader:tag",
@@ -61,7 +61,7 @@ func TestWithIronicOverrides(t *testing.T) {
 			},
 
 			Expected: VersionInfo{
-				InstalledVersion:       "27.0",
+				InstalledVersion:       metal3api.MustParseVersion("27.0"),
 				IronicImage:            "quay.io/metal3-io/ironic:release-27.0",
 				KeepalivedImage:        "quay.io/metal3-io/keepalived:latest",
 				RamdiskDownloaderImage: "quay.io/metal3-io/ironic-ipa-downloader:latest",
@@ -71,7 +71,8 @@ func TestWithIronicOverrides(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Scenario, func(t *testing.T) {
-			result := tc.Configured.WithIronicOverrides(&tc.Ironic)
+			result, err := tc.Configured.WithIronicOverrides(&tc.Ironic)
+			assert.NoError(t, err)
 			assert.Equal(t, tc.Expected, result)
 		})
 	}

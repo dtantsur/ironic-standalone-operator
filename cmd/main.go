@@ -82,6 +82,7 @@ func main() {
 	var controllerConcurrency int
 	var clusterDomain string
 	var versionInfo ironic.VersionInfo
+	var installedVersion string
 	var featureGates map[string]bool
 
 	tlsCipherPreferredValues := cliflag.PreferredTLSCipherNames()
@@ -119,7 +120,7 @@ func main() {
 		"Ramdisk downloader image to install.")
 	flag.StringVar(&versionInfo.KeepalivedImage, "keepalived-image", os.Getenv("KEEPALIVED_IMAGE"),
 		"Keepalived image to install.")
-	flag.StringVar(&versionInfo.InstalledVersion, "ironic-version", os.Getenv("IRONIC_VERSION"),
+	flag.StringVar(&installedVersion, "ironic-version", os.Getenv("IRONIC_VERSION"),
 		"Branch of Ironic that the operator installs.")
 
 	featureGatesFlag := cliflag.NewMapStringBool(&featureGates)
@@ -139,6 +140,17 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	if installedVersion == "" {
+		versionInfo.InstalledVersion = ironic.DefaultVersion
+	} else {
+		parsedVersion, err := metal3iov1alpha1.ParseVersion(installedVersion)
+		if err != nil {
+			setupLog.Error(err, "unable to parse ironic-version")
+			os.Exit(1)
+		}
+		versionInfo.InstalledVersion = parsedVersion
+	}
 
 	if err := metal3iov1alpha1.CurrentFeatureGate.SetFromMap(featureGates); err != nil {
 		setupLog.Error(err, "unable to parse feature gates")

@@ -20,21 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	VersionLatest = "latest"
-	Version270    = "27.0"
-)
-
-// Mapping of supported versions to container image tags.
-// This mapping must be updated each time a new ironic-image branch is created.
-// Also consider updating the version test(s) in test/suite_test.go to verify
-// that the new version is installable and its API version matches
-// expectations.
-var SupportedVersions = map[string]string{
-	VersionLatest: "latest",
-	Version270:    "release-27.0",
-}
-
 // Inspection defines inspection settings
 type Inspection struct {
 	// Collectors is a list of inspection collectors to enable.

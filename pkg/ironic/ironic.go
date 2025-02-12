@@ -39,7 +39,7 @@ func ensureIronicDaemonSet(cctx ControllerContext, ironic *metal3api.Ironic, db 
 			deploy.Labels = make(map[string]string, 2)
 		}
 		deploy.Labels[metal3api.IronicAppLabel] = ironicDeploymentName(ironic)
-		deploy.Labels[metal3api.IronicVersionLabel] = cctx.VersionInfo.InstalledVersion
+		deploy.Labels[metal3api.IronicVersionLabel] = cctx.VersionInfo.InstalledVersion.String()
 
 		matchLabels := map[string]string{metal3api.IronicAppLabel: ironicDeploymentName(ironic)}
 		deploy.Spec.Selector = &metav1.LabelSelector{MatchLabels: matchLabels}
@@ -77,7 +77,7 @@ func ensureIronicDeployment(cctx ControllerContext, ironic *metal3api.Ironic, db
 			deploy.Labels = make(map[string]string, 2)
 		}
 		deploy.Labels[metal3api.IronicAppLabel] = ironicDeploymentName(ironic)
-		deploy.Labels[metal3api.IronicVersionLabel] = cctx.VersionInfo.InstalledVersion
+		deploy.Labels[metal3api.IronicVersionLabel] = cctx.VersionInfo.InstalledVersion.String()
 
 		matchLabels := map[string]string{metal3api.IronicAppLabel: ironicDeploymentName(ironic)}
 		deploy.Spec.Selector = &metav1.LabelSelector{MatchLabels: matchLabels}
