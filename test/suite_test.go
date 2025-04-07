@@ -230,6 +230,7 @@ func WaitForIronic(name types.NamespacedName) *metal3api.Ironic {
 
 		writeYAML(ironic, ironic.Namespace, ironic.Name, "ironic")
 		GinkgoWriter.Printf("Current status of Ironic: %+v\n", ironic.Status)
+		logResources(ironic, "")
 
 		cond := meta.FindStatusCondition(ironic.Status.Conditions, string(metal3api.IronicStatusReady))
 		if cond != nil && cond.ObservedGeneration >= ironic.Generation {
@@ -246,12 +247,10 @@ func WaitForIronic(name types.NamespacedName) *metal3api.Ironic {
 				} else {
 					Expect(ironic.Status.InstalledVersion).ToNot(BeEmpty())
 				}
-				logResources(ironic, "")
 				return true
 			}
 		}
 
-		logResources(ironic, "")
 		return false
 	}).WithTimeout(5 * time.Minute).WithPolling(10 * time.Second).Should(BeTrue())
 
