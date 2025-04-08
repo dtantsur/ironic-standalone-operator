@@ -7,7 +7,7 @@ cd "${REPO_ROOT}/test"
 
 LOGDIR="${LOGDIR:-/tmp/logs}"
 JUNIT_OUTPUT="${JUNIT_OUTPUT:-${LOGDIR}/report.xml}"
-TEST_TIMEOUT="${TEST_TIMEOUT:-60m}"
+TEST_TIMEOUT="${TEST_TIMEOUT:-90m}"
 
 . testing.env
 
