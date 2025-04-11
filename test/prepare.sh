@@ -4,12 +4,19 @@ set -eux -o pipefail
 
 REPO_ROOT=$(realpath "$(dirname "${BASH_SOURCE[0]}")/..")
 cd "${REPO_ROOT}"
+mkdir -p bin
 
 IMG="${IMG:-localhost/controller:test}"
 LOGDIR="${LOGDIR:-/tmp/logs}"
 CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-}"
-CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-1.16.1}"
+
+HELM_VERSION=3.17.3
+HELM_CHECKSUM=ee88b3c851ae6466a3de507f7be73fe94d54cbf2987cbaa3d1a3832ea331f2cd
+HELM_FILE="helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+
+CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-1.17.1}"
 CLUSTER_TYPE="${CLUSTER_TYPE:-kind}"
+
 
 . test/testing.env
 
@@ -23,13 +30,20 @@ if [[ -z "${CONTAINER_RUNTIME}" ]]; then
     fi
 fi
 
+pushd /tmp
+curl -OL "https://get.helm.sh/${HELM_FILE}"
+echo "${HELM_CHECKSUM} ${HELM_FILE}" | sha256sum -c
+tar -xzf "${HELM_FILE}"
+HELM="${REPO_ROOT}/bin/helm"
+mv linux-amd64/helm "${HELM}"
+popd
+
 # Installing cert-manager
 
-kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VERSION}/cert-manager.yaml"
-kubectl wait --for=condition=Available --timeout=60s \
-    -n cert-manager deployment/cert-manager
-kubectl wait --for=condition=Available --timeout=60s \
-    -n cert-manager deployment/cert-manager-webhook
+"${HELM}" repo add jetstack https://charts.jetstack.io --force-update
+"${HELM}" install cert-manager jetstack/cert-manager \
+  --namespace cert-manager --create-namespace \
+  --version "v${CERT_MANAGER_VERSION}" --set crds.enabled=true
 
 # Caching required images
 
