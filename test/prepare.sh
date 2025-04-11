@@ -15,6 +15,7 @@ HELM_CHECKSUM=ee88b3c851ae6466a3de507f7be73fe94d54cbf2987cbaa3d1a3832ea331f2cd
 HELM_FILE="helm-v${HELM_VERSION}-linux-amd64.tar.gz"
 
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-1.17.1}"
+MARIADB_OPERATOR_VERSION="${MARIADB_OPERATOR_VERSION:-0.38.0}"
 CLUSTER_TYPE="${CLUSTER_TYPE:-kind}"
 
 
@@ -44,6 +45,15 @@ popd
 "${HELM}" install cert-manager jetstack/cert-manager \
   --namespace cert-manager --create-namespace \
   --version "v${CERT_MANAGER_VERSION}" --set crds.enabled=true
+
+# Installing MariaDB operator
+
+"${HELM}" repo add mariadb-operator https://helm.mariadb.com/mariadb-operator
+"${HELM}" install mariadb-operator-crds mariadb-operator/mariadb-operator-crds \
+    --version "${MARIADB_OPERATOR_VERSION}"
+"${HELM}" install mariadb-operator mariadb-operator/mariadb-operator \
+    --set webhook.cert.certManager.enabled=true \
+    --version "${MARIADB_OPERATOR_VERSION}"
 
 # Caching required images
 
