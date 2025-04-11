@@ -402,22 +402,22 @@ func getCurrentIronicIPs(ctx context.Context, namespace, name string) []string {
 	return addresses
 }
 
+func getStatusCode(ctx context.Context, httpClient *http.Client, url string) int {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, http.NoBody)
+	Expect(err).NotTo(HaveOccurred())
+
+	resp, err := httpClient.Do(req)
+	Expect(err).NotTo(HaveOccurred())
+	defer resp.Body.Close()
+
+	return resp.StatusCode
+}
+
 func verifyHTTPD(ctx context.Context, currentIronicIPs []string, assumptions TestAssumptions) {
 	By("checking the httpd server existence and the ramdisk downloader")
 
 	httpClient := http.Client{}
 	addHTTPTransport(&httpClient)
-
-	getStatusCode := func(url string) int {
-		req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, http.NoBody)
-		Expect(err).NotTo(HaveOccurred())
-
-		resp, err := httpClient.Do(req)
-		Expect(err).NotTo(HaveOccurred())
-		defer resp.Body.Close()
-
-		return resp.StatusCode
-	}
 
 	expectedCode := 200
 	if assumptions.disableDownloader {
@@ -426,13 +426,15 @@ func verifyHTTPD(ctx context.Context, currentIronicIPs []string, assumptions Tes
 
 	// NOTE(dtantsur): each Ironic replica has its own httpd, so verify them all independently
 	for _, ironicIP := range currentIronicIPs {
-		statusCode := getStatusCode(fmt.Sprintf("http://%s/images/ironic-python-agent.kernel", net.JoinHostPort(ironicIP, "6180")))
+		testURL := fmt.Sprintf("http://%s/images/ironic-python-agent.kernel", net.JoinHostPort(ironicIP, "6180"))
+		statusCode := getStatusCode(ctx, &httpClient, testURL)
 		Expect(statusCode).To(Equal(expectedCode))
 	}
 
 	if assumptions.withTLS {
 		for _, ironicIP := range currentIronicIPs {
-			statusCode := getStatusCode(fmt.Sprintf("https://%s/redfish/", net.JoinHostPort(ironicIP, "6183")))
+			testURL := fmt.Sprintf("https://%s/redfish/", net.JoinHostPort(ironicIP, "6183"))
+			statusCode := getStatusCode(ctx, &httpClient, testURL)
 			// NOTE(dtantsur): without any valid virtual media images nothing will return a success code (not even /redfish/).
 			// We get 200, 403 or 404 depending on a few factors. Check at least that we don't have 5xx.
 			Expect(statusCode).To(BeNumerically("<", 500))
@@ -449,6 +451,19 @@ func verifyAuthentication(ctx context.Context, ironicURLs []string) {
 		_, err = nodes.List(cli, nodes.ListOpts{}).AllPages(ctx)
 		Expect(err).To(HaveOccurred())
 		Expect(gophercloud.ResponseCodeIs(err, 401)).To(BeTrue())
+	}
+}
+
+func verifyRPC(ctx context.Context, ironicIPs []string) {
+	By("checking RPC authentication")
+
+	httpClient := http.Client{}
+	addHTTPTransport(&httpClient)
+
+	for _, ironicIP := range ironicIPs {
+		testURL := "http://" + net.JoinHostPort(ironicIP, "8089")
+		statusCode := getStatusCode(ctx, &httpClient, testURL)
+		Expect(statusCode).To(Equal(401))
 	}
 }
 
@@ -538,6 +553,10 @@ func VerifyIronic(ironic *metal3api.Ironic, assumptions TestAssumptions) {
 	verifyHTTPD(withTimeout, currentIronicIPs, assumptions)
 
 	verifyAuthentication(withTimeout, ironicURLs)
+
+	if assumptions.withHA {
+		verifyRPC(withTimeout, currentIronicIPs)
+	}
 
 	clients := make([]*gophercloud.ServiceClient, 0, len(ironicURLs))
 
