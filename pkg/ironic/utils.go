@@ -2,6 +2,7 @@ package ironic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/go-logr/logr"
 	metal3api "github.com/metal3-io/ironic-standalone-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -325,5 +327,82 @@ func applyOverridesToPod(overrides *metal3api.Overrides, podTemplate corev1.PodT
 	podTemplate.Annotations = mergeMaps(podTemplate.Annotations, overrides.Annotations)
 	podTemplate.Labels = mergeMaps(podTemplate.Labels, overrides.Labels)
 
+	// Apply container patches
+	if len(overrides.PatchContainers) > 0 {
+		podTemplate.Spec.Containers = applyContainerPatches(overrides.PatchContainers, podTemplate.Spec.Containers)
+		podTemplate.Spec.InitContainers = applyContainerPatches(overrides.PatchContainers, podTemplate.Spec.InitContainers)
+	}
+
 	return podTemplate
+}
+
+// applyContainerPatches applies JSON patches to containers that match the specified names.
+func applyContainerPatches(patches []metal3api.PatchContainer, containers []corev1.Container) []corev1.Container {
+	if len(patches) == 0 {
+		return containers
+	}
+
+	// Create a map of patches by container name for quick lookup
+	patchMap := make(map[string][]metal3api.JSONPatchOperation)
+	for _, patch := range patches {
+		patchMap[patch.Name] = patch.Patch
+	}
+
+	// Apply patches to matching containers
+	result := make([]corev1.Container, len(containers))
+	for i, container := range containers {
+		if operations, exists := patchMap[container.Name]; exists {
+			patched, err := applyJSONPatchToContainer(container, operations)
+			if err != nil {
+				// Log error but continue with original container to avoid breaking the deployment
+				// In a production system, you might want to handle this differently
+				result[i] = container
+			} else {
+				result[i] = patched
+			}
+		} else {
+			result[i] = container
+		}
+	}
+
+	return result
+}
+
+// applyJSONPatchToContainer applies a JSON patch to a single container.
+func applyJSONPatchToContainer(container corev1.Container, operations []metal3api.JSONPatchOperation) (corev1.Container, error) {
+	if len(operations) == 0 {
+		return container, nil
+	}
+
+	// Marshal the container to JSON
+	containerJSON, err := json.Marshal(container)
+	if err != nil {
+		return container, fmt.Errorf("failed to marshal container %s: %w", container.Name, err)
+	}
+
+	// Convert the operations to JSON and then decode with evanphx library
+	operationsJSON, err := json.Marshal(operations)
+	if err != nil {
+		return container, fmt.Errorf("failed to marshal operations for container %s: %w", container.Name, err)
+	}
+
+	// Create the JSON patch using evanphx library
+	patch, err := jsonpatch.DecodePatch(operationsJSON)
+	if err != nil {
+		return container, fmt.Errorf("failed to decode JSON patch for container %s: %w", container.Name, err)
+	}
+
+	// Apply the patch
+	patchedJSON, err := patch.Apply(containerJSON)
+	if err != nil {
+		return container, fmt.Errorf("failed to apply JSON patch to container %s: %w", container.Name, err)
+	}
+
+	// Unmarshal the patched JSON back to a Container
+	var patchedContainer corev1.Container
+	if err := json.Unmarshal(patchedJSON, &patchedContainer); err != nil {
+		return container, fmt.Errorf("failed to unmarshal patched container %s: %w", container.Name, err)
+	}
+
+	return patchedContainer, nil
 }

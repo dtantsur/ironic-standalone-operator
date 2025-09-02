@@ -304,6 +304,52 @@ spec:
                     description: Extra labels to add to each pod (including upgrade
                       jobs).
                     type: object
+                  patchContainers:
+                    description: PatchContainers allows applying JSON patches to specific
+                      containers or initContainers.
+                    items:
+                      description: PatchContainer defines a JSON patch to apply to
+                        a specific container.
+                      properties:
+                        name:
+                          description: Name is the name of the container or initContainer
+                            to patch.
+                          type: string
+                        patch:
+                          description: |-
+                            Patch is a JSON patch (RFC 6902) to apply to the container.
+                            This should be a JSON array of patch operations.
+                          items:
+                            description: JSONPatchOperation represents a single JSON
+                              patch operation (RFC 6902).
+                            properties:
+                              from:
+                                description: From is the JSON pointer to the source
+                                  location (for move and copy operations).
+                                type: string
+                              op:
+                                description: 'Op is the operation to perform: add,
+                                  remove, replace, move, copy, test.'
+                                type: string
+                              path:
+                                description: Path is the JSON pointer to the location
+                                  in the target document.
+                                type: string
+                              value:
+                                description: Value is the value to be used within
+                                  the operation.
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                            required:
+                            - op
+                            - path
+                            type: object
+                          type: array
+                      required:
+                      - name
+                      - patch
+                      type: object
+                    type: array
                 type: object
               tls:
                 description: TLS defines TLS-related settings for various network

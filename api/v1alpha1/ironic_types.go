@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -268,6 +269,39 @@ type Overrides struct {
 	// Extra labels to add to each pod (including upgrade jobs).
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+
+	// PatchContainers allows applying JSON patches to specific containers or initContainers.
+	// +optional
+	PatchContainers []PatchContainer `json:"patchContainers,omitempty"`
+}
+
+// JSONPatchOperation represents a single JSON patch operation (RFC 6902).
+type JSONPatchOperation struct {
+	// Op is the operation to perform: add, remove, replace, move, copy, test.
+	Op string `json:"op"`
+
+	// Path is the JSON pointer to the location in the target document.
+	Path string `json:"path"`
+
+	// From is the JSON pointer to the source location (for move and copy operations).
+	// +optional
+	From string `json:"from,omitempty"`
+
+	// Value is the value to be used within the operation.
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +optional
+	Value *runtime.RawExtension `json:"value,omitempty"`
+}
+
+// PatchContainer defines a JSON patch to apply to a specific container.
+type PatchContainer struct {
+	// Name is the name of the container or initContainer to patch.
+	Name string `json:"name"`
+
+	// Patch is a JSON patch (RFC 6902) to apply to the container.
+	// This should be a JSON array of patch operations.
+	// +kubebuilder:validation:Type=array
+	Patch []JSONPatchOperation `json:"patch"`
 }
 
 // IronicSpec defines the desired state of Ironic.

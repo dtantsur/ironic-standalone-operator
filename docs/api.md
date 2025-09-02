@@ -635,6 +635,96 @@ EXPERIMENTAL: requires feature gate Overrides.
           Extra labels to add to each pod (including upgrade jobs).<br/>
         </td>
         <td>false</td>
+      </tr><tr>
+        <td><b><a href="#ironicspecoverridespatchcontainersindex">patchContainers</a></b></td>
+        <td>[]object</td>
+        <td>
+          PatchContainers allows applying JSON patches to specific containers or initContainers.<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### Ironic.spec.overrides.patchContainers[index]
+<sup><sup>[↩ Parent](#ironicspecoverrides)</sup></sup>
+
+
+
+PatchContainer defines a JSON patch to apply to a specific container.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          Name is the name of the container or initContainer to patch.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b><a href="#ironicspecoverridespatchcontainersindexpatchindex">patch</a></b></td>
+        <td>[]object</td>
+        <td>
+          Patch is a JSON patch (RFC 6902) to apply to the container.
+This should be a JSON array of patch operations.<br/>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
+### Ironic.spec.overrides.patchContainers[index].patch[index]
+<sup><sup>[↩ Parent](#ironicspecoverridespatchcontainersindex)</sup></sup>
+
+
+
+JSONPatchOperation represents a single JSON patch operation (RFC 6902).
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>op</b></td>
+        <td>string</td>
+        <td>
+          Op is the operation to perform: add, remove, replace, move, copy, test.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>path</b></td>
+        <td>string</td>
+        <td>
+          Path is the JSON pointer to the location in the target document.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>from</b></td>
+        <td>string</td>
+        <td>
+          From is the JSON pointer to the source location (for move and copy operations).<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>value</b></td>
+        <td>object</td>
+        <td>
+          Value is the value to be used within the operation.<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
 
