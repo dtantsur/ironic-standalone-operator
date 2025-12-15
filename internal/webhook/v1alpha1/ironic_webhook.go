@@ -44,7 +44,7 @@ func SetupIronicWebhookWithManager(mgr ctrl.Manager) error {
 type IronicCustomValidator struct{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (r *IronicCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (r *IronicCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	ironic, ok := obj.(*metal3api.Ironic)
 	if !ok {
 		return nil, fmt.Errorf("expected an Ironic, got %T", obj)
@@ -55,7 +55,7 @@ func (r *IronicCustomValidator) ValidateCreate(ctx context.Context, obj runtime.
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (r *IronicCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (r *IronicCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	ironic, ok := newObj.(*metal3api.Ironic)
 	if !ok {
 		return nil, fmt.Errorf("expected an Ironic for newObj, got %T", newObj)

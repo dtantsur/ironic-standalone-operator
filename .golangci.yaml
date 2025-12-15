@@ -55,7 +55,7 @@ linters:
   - prealloc
   - predeclared
   - reassign
-  #- revive
+  - revive
   - rowserrcheck
   - staticcheck
   - tagliatelle

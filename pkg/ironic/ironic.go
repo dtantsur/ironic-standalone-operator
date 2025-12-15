@@ -238,6 +238,6 @@ func EnsureIronic(cctx ControllerContext, resources Resources) (status Status, e
 }
 
 // RemoveIronic removes all bits of the Ironic deployment.
-func RemoveIronic(cctx ControllerContext, ironic *metal3api.Ironic) error {
+func RemoveIronic(_ ControllerContext, _ *metal3api.Ironic) error {
 	return nil // rely on ownership-based clean up
 }

@@ -100,9 +100,8 @@ func secretNeedsUpdating(secret *corev1.Secret, logger logr.Logger) bool {
 			if ok && bcrypt.CompareHashAndPassword([]byte(password), []byte(newPasswordString)) == nil {
 				// All good, keep the secret the way it is
 				return false
-			} else {
-				logger.Info("API secret needs updating: passwords don't match")
 			}
+			logger.Info("API secret needs updating: passwords don't match")
 		} else {
 			logger.Info("API secret needs updating: users don't match", "HtpasswdUser", user, "CurrentUser", newUserString)
 		}

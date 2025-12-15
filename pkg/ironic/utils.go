@@ -141,10 +141,10 @@ func getDeploymentStatus(cctx ControllerContext, deploy *appsv1.Deployment) (Sta
 
 	if available && updated {
 		return ready()
-	} else {
-		cctx.Logger.Info("deployment not available yet", "Deployment", deploy.Name, "Status", deploy.Status)
-		return inProgress("deployment not available yet")
 	}
+
+	cctx.Logger.Info("deployment not available yet", "Deployment", deploy.Name, "Status", deploy.Status)
+	return inProgress("deployment not available yet")
 }
 
 func getDaemonSetStatus(cctx ControllerContext, deploy *appsv1.DaemonSet) (Status, error) {
@@ -163,15 +163,15 @@ func getDaemonSetStatus(cctx ControllerContext, deploy *appsv1.DaemonSet) (Statu
 
 	if available && updated {
 		return ready()
-	} else {
-		cctx.Logger.Info("daemon set not available yet", "DaemonSet", deploy.Name,
-			"NumberUnavailable", deploy.Status.NumberUnavailable, "UpdatedNumberScheduled", deploy.Status.UpdatedNumberScheduled)
-		if !updated {
-			return inProgress(fmt.Sprintf("daemon set not available yet: %d replicas need updating",
-				deploy.Status.DesiredNumberScheduled-deploy.Status.UpdatedNumberScheduled))
-		}
-		return inProgress(fmt.Sprintf("daemon set not available yet: %d replicas unavailable", deploy.Status.NumberUnavailable))
 	}
+
+	cctx.Logger.Info("daemon set not available yet", "DaemonSet", deploy.Name,
+		"NumberUnavailable", deploy.Status.NumberUnavailable, "UpdatedNumberScheduled", deploy.Status.UpdatedNumberScheduled)
+	if !updated {
+		return inProgress(fmt.Sprintf("daemon set not available yet: %d replicas need updating",
+			deploy.Status.DesiredNumberScheduled-deploy.Status.UpdatedNumberScheduled))
+	}
+	return inProgress(fmt.Sprintf("daemon set not available yet: %d replicas unavailable", deploy.Status.NumberUnavailable))
 }
 
 func getServiceStatus(service *corev1.Service) (Status, error) {

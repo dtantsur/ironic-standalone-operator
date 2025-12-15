@@ -257,9 +257,9 @@ func WaitForUpgrade(name types.NamespacedName, toVersion string) *metal3api.Iron
 
 			// See https://github.com/metal3-io/ironic-standalone-operator/issues/304
 			return !podsAreBeingDeleted(ctx, name.Namespace, name.Name)
-		} else {
-			Expect(upgraded).To(BeFalse(), "InstalledVersion set before the Ready condition")
 		}
+
+		Expect(upgraded).To(BeFalse(), "InstalledVersion set before the Ready condition")
 
 		logResources(ironic, suffix)
 		return false
