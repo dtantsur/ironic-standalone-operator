@@ -3,7 +3,7 @@ module github.com/metal3-io/ironic-standalone-operator/test
 go 1.26.0
 
 require (
-	github.com/gophercloud/gophercloud/v2 v2.15.0
+	github.com/gophercloud/gophercloud/v2 v2.16.0
 	github.com/mariadb-operator/mariadb-operator v0.38.1
 	github.com/metal3-io/ironic-standalone-operator v0.0.0
 	github.com/metal3-io/ironic-standalone-operator/api v0.0.0
