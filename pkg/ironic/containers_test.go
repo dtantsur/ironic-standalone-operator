@@ -2018,8 +2018,15 @@ func TestNetworkingServiceContainer(t *testing.T) {
 		t.Run(tc.Scenario, func(t *testing.T) {
 			cctx := ControllerContext{Domain: "cluster.local"}
 			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-api-secret"},
 				Data: map[string][]byte{
 					"htpasswd": []byte("abcd"),
+				},
+			}
+			rpcSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-rpc-credentials"},
+				Data: map[string][]byte{
+					"htpasswd": []byte("efgh"),
 				},
 			}
 			ironic := &metal3api.Ironic{
@@ -2035,6 +2042,9 @@ func TestNetworkingServiceContainer(t *testing.T) {
 			resources := Resources{
 				Ironic:    ironic,
 				APISecret: secret,
+			}
+			if tc.NetworkingService != nil && tc.NetworkingService.Enabled {
+				resources.RPCSecret = rpcSecret
 			}
 			podTemplate, err := newIronicPodTemplate(cctx, resources)
 			require.NoError(t, err)
@@ -2080,12 +2090,27 @@ func TestNetworkingServiceContainer(t *testing.T) {
 				// Verify ironic-auth volume mount at /auth/ironic-rpc is present
 				var foundAuthMount bool
 				for _, mount := range ironicContainer.VolumeMounts {
-					if mount.Name == "ironic-auth" && mount.MountPath == "/auth/ironic-rpc" {
+					if mount.Name == ironicAuthVolumeName && mount.MountPath == "/auth/ironic-rpc" {
 						foundAuthMount = true
 						break
 					}
 				}
 				assert.True(t, foundAuthMount, "Expected ironic-auth mount at /auth/ironic-rpc when networking is enabled")
+
+				// The ironic-auth volume must use the RPC credentials secret,
+				// not the API credentials secret
+				var authVolume *corev1.Volume
+				for i := range podTemplate.Spec.Volumes {
+					if podTemplate.Spec.Volumes[i].Name == ironicAuthVolumeName {
+						authVolume = &podTemplate.Spec.Volumes[i]
+						break
+					}
+				}
+				require.NotNil(t, authVolume, "Expected ironic-auth volume when networking is enabled")
+				assert.Equal(t, rpcSecret.Name, authVolume.Secret.SecretName)
+
+				// The pod must be restarted when the RPC secret changes
+				assert.Contains(t, podTemplate.Annotations, "ironic.metal3.io/rpc-secret-version")
 
 				// Verify that ironic container has networking service configuration
 				assert.Contains(t, ironicEnvVars, "IRONIC_NETWORKING_ENABLED")
@@ -2104,9 +2129,144 @@ func TestNetworkingServiceContainer(t *testing.T) {
 				// Networking service disabled - env vars should not be present
 				assert.NotContains(t, ironicEnvVars, "IRONIC_NETWORKING_ENABLED")
 				assert.NotContains(t, ironicEnvVars, "IRONIC_NETWORKING_JSON_RPC_HOST")
+
+				// No RPC credentials are needed without the networking service
+				var authVolume *corev1.Volume
+				for i := range podTemplate.Spec.Volumes {
+					if podTemplate.Spec.Volumes[i].Name == ironicAuthVolumeName {
+						authVolume = &podTemplate.Spec.Volumes[i]
+						break
+					}
+				}
+				assert.Nil(t, authVolume, "ironic-auth volume should not exist when the RPC bus is not used")
+				assert.NotContains(t, podTemplate.Annotations, "ironic.metal3.io/rpc-secret-version")
 			}
 		})
 	}
+}
+
+func TestHighAvailabilityRPCSecret(t *testing.T) {
+	apiSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-api-secret"},
+		Data: map[string][]byte{
+			htpasswdKey: []byte("abcd"),
+		},
+	}
+	rpcSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-rpc-credentials"},
+		Data: map[string][]byte{
+			htpasswdKey: []byte("efgh"),
+		},
+	}
+
+	newIronic := func(tls bool) *metal3api.Ironic {
+		spec := metal3api.IronicSpec{HighAvailability: true}
+		if tls {
+			spec.TLS.CertificateName = "test-tls-cert"
+		}
+		return &metal3api.Ironic{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "test"},
+			Spec:       spec,
+		}
+	}
+
+	findIronicContainer := func(t *testing.T, podTemplate *corev1.PodTemplateSpec) *corev1.Container {
+		t.Helper()
+		for i := range podTemplate.Spec.Containers {
+			if podTemplate.Spec.Containers[i].Name == "ironic" {
+				return &podTemplate.Spec.Containers[i]
+			}
+		}
+		require.FailNow(t, "ironic container not found")
+		return nil
+	}
+
+	findAuthVolume := func(t *testing.T, podTemplate *corev1.PodTemplateSpec) *corev1.Volume {
+		t.Helper()
+		for i := range podTemplate.Spec.Volumes {
+			if podTemplate.Spec.Volumes[i].Name == ironicAuthVolumeName {
+				return &podTemplate.Spec.Volumes[i]
+			}
+		}
+		return nil
+	}
+
+	t.Run("RPC secret is mounted for JSON RPC", func(t *testing.T) {
+		cctx := ControllerContext{}
+		resources := Resources{
+			Ironic:    newIronic(false),
+			APISecret: apiSecret,
+			RPCSecret: rpcSecret,
+		}
+		podTemplate, err := newIronicPodTemplate(cctx, resources)
+		require.NoError(t, err)
+
+		authVolume := findAuthVolume(t, &podTemplate)
+		require.NotNil(t, authVolume, "Expected ironic-auth volume in the HA mode")
+		assert.Equal(t, rpcSecret.Name, authVolume.Secret.SecretName,
+			"The RPC bus must use the RPC credentials secret, not the API secret")
+
+		ironicContainer := findIronicContainer(t, &podTemplate)
+		var foundAuthMount bool
+		for _, mount := range ironicContainer.VolumeMounts {
+			if mount.Name == ironicAuthVolumeName && mount.MountPath == "/auth/ironic-rpc" {
+				foundAuthMount = true
+				break
+			}
+		}
+		assert.True(t, foundAuthMount, "Expected ironic-auth mount at /auth/ironic-rpc in the HA mode")
+
+		// Without TLS the API is served by the ironic container itself, so
+		// the API secret is still needed for IRONIC_HTPASSWD.
+		var htpasswdEnv *corev1.EnvVar
+		for i := range ironicContainer.Env {
+			if ironicContainer.Env[i].Name == "IRONIC_HTPASSWD" {
+				htpasswdEnv = &ironicContainer.Env[i]
+				break
+			}
+		}
+		require.NotNil(t, htpasswdEnv)
+		require.NotNil(t, htpasswdEnv.ValueFrom.SecretKeyRef)
+		assert.Equal(t, apiSecret.Name, htpasswdEnv.ValueFrom.SecretKeyRef.Name)
+	})
+
+	t.Run("API htpasswd is not passed to Ironic with TLS", func(t *testing.T) {
+		cctx := ControllerContext{}
+		resources := Resources{
+			Ironic:    newIronic(true),
+			APISecret: apiSecret,
+			RPCSecret: rpcSecret,
+			TLSSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-tls-cert"},
+				Data: map[string][]byte{
+					"ca.crt": []byte("fake-ca"),
+				},
+			},
+		}
+		podTemplate, err := newIronicPodTemplate(cctx, resources)
+		require.NoError(t, err)
+
+		authVolume := findAuthVolume(t, &podTemplate)
+		require.NotNil(t, authVolume, "Expected ironic-auth volume in the HA mode")
+		assert.Equal(t, rpcSecret.Name, authVolume.Secret.SecretName)
+
+		ironicContainer := findIronicContainer(t, &podTemplate)
+		for _, env := range ironicContainer.Env {
+			assert.NotEqual(t, "IRONIC_HTPASSWD", env.Name,
+				"With TLS the API authentication is handled by httpd, the RPC secret is mounted separately")
+		}
+	})
+
+	t.Run("missing RPC secret is an error", func(t *testing.T) {
+		cctx := ControllerContext{}
+		resources := Resources{
+			Ironic:    newIronic(false),
+			APISecret: apiSecret,
+		}
+		_, err := newIronicPodTemplate(cctx, resources)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "RPC credentials secret")
+	})
 }
 
 func TestFormatProviderNetwork(t *testing.T) {

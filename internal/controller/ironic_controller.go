@@ -235,9 +235,22 @@ func (r *IronicReconciler) handleIronic(cctx ironic.ControllerContext, ironicCon
 		return requeue, err
 	}
 
+	rpcSecret, err := ironic.EnsureRPCSecret(cctx, ironicConf, r.APIReader)
+	if err != nil {
+		// Only missing-label and NotFound errors require user intervention.
+		// Other errors are transient and should just be retried.
+		var missingLabelErr *secretutils.MissingLabelError
+		if errors.As(err, &missingLabelErr) || k8serrors.IsNotFound(err) {
+			_ = r.setNotReady(cctx, ironicConf, metal3api.IronicReasonFailed, err.Error())
+			r.recordEventf(ironicConf, corev1.EventTypeWarning, eventReasonInvalidLinkedRes, "%v", err)
+		}
+		return requeue, err
+	}
+
 	resources := ironic.Resources{
 		Ironic:                  ironicConf,
 		APISecret:               apiSecret,
+		RPCSecret:               rpcSecret,
 		TLSSecret:               tlsSecret,
 		BMCCASecret:             bmcCASecret,
 		BMCCAConfigMap:          bmcCAConfigMap,

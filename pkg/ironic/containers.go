@@ -44,6 +44,8 @@ const (
 
 	trustedCAVolumeName = "trusted-ca"
 	bmcCAVolumeName     = "cert-bmc"
+
+	ironicAuthVolumeName = "ironic-auth"
 )
 
 func buildCommonEnvVars(ironic *metal3api.Ironic) []corev1.EnvVar {
@@ -334,9 +336,10 @@ func buildIronicEnvVars(cctx ControllerContext, resources Resources) []corev1.En
 		}
 	}
 
-	// When TLS is used, httpd is responsible for authentication.
-	// When JSON RPC is enabled, the password is required for it as well.
-	if resources.TLSSecret == nil || resources.Ironic.Spec.HighAvailability {
+	// When TLS is not used, the Ironic container serves the API itself and
+	// needs the API credentials for HTTP basic authentication. The JSON RPC
+	// bus authentication is handled separately through /auth/ironic-rpc.
+	if resources.TLSSecret == nil {
 		result = append(result,
 			corev1.EnvVar{
 				Name: "IRONIC_HTPASSWD",
@@ -551,15 +554,6 @@ func buildIronicVolumesAndMounts(resources Resources) (volumes []corev1.Volume, 
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
-		{
-			Name: "ironic-auth",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  resources.APISecret.Name,
-					DefaultMode: ptr.To(corev1.SecretVolumeSourceDefaultMode),
-				},
-			},
-		},
 	}
 	mounts = []corev1.VolumeMount{
 		{
@@ -568,8 +562,17 @@ func buildIronicVolumesAndMounts(resources Resources) (volumes []corev1.Volume, 
 		},
 	}
 	if isAuthVolumeRequired(resources) {
+		volumes = append(volumes, corev1.Volume{
+			Name: ironicAuthVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  resources.RPCSecret.Name,
+					DefaultMode: ptr.To(corev1.SecretVolumeSourceDefaultMode),
+				},
+			},
+		})
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      "ironic-auth",
+			Name:      ironicAuthVolumeName,
 			MountPath: authDir + "/ironic-rpc",
 		})
 	}
@@ -1034,6 +1037,15 @@ func newIronicPodTemplate(cctx ControllerContext, resources Resources) (corev1.P
 		return corev1.PodTemplateSpec{}, errors.New("no htpasswd in the API secret")
 	}
 
+	if isAuthVolumeRequired(resources) {
+		if resources.RPCSecret == nil {
+			return corev1.PodTemplateSpec{}, errors.New("the JSON RPC bus is used but no RPC credentials secret is provided")
+		}
+		if len(resources.RPCSecret.Data[htpasswdKey]) == 0 {
+			return corev1.PodTemplateSpec{}, errors.New("no htpasswd in the RPC credentials secret")
+		}
+	}
+
 	// Sanity: ensure port values are correct even if the webhook is disabled/malfunctioning
 	enforcePortValues(&resources.Ironic.Spec.Networking)
 
@@ -1190,6 +1202,9 @@ func newIronicPodTemplate(cctx ControllerContext, resources Resources) (corev1.P
 
 	// Make sure the pod is restarted when secrets change.
 	annotations := secretVersionAnnotations("api-secret", resources.APISecret)
+	if resources.RPCSecret != nil {
+		maps.Copy(annotations, secretVersionAnnotations("rpc-secret", resources.RPCSecret))
+	}
 	if resources.TLSSecret != nil {
 		maps.Copy(annotations, secretVersionAnnotations("tls-secret", resources.TLSSecret))
 	}

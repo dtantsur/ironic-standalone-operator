@@ -84,7 +84,7 @@ func buildNetworkingContainerEnv(resources Resources) []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: resources.APISecret.Name,
+						Name: resources.RPCSecret.Name,
 					},
 					Key: htpasswdKey,
 				},
@@ -141,16 +141,16 @@ func buildNetworkingContainer(cctx ControllerContext, resources Resources, mount
 
 func buildNetworkingVolumesAndMounts(resources Resources) (volumes []corev1.Volume, mounts []corev1.VolumeMount) {
 	volumes = append(volumes, corev1.Volume{
-		Name: "ironic-auth",
+		Name: ironicAuthVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName:  resources.APISecret.Name,
+				SecretName:  resources.RPCSecret.Name,
 				DefaultMode: ptr.To(corev1.SecretVolumeSourceDefaultMode),
 			},
 		},
 	})
 	mounts = append(mounts, corev1.VolumeMount{
-		Name:      "ironic-auth",
+		Name:      ironicAuthVolumeName,
 		MountPath: authDir + "/ironic-rpc",
 	})
 
@@ -226,6 +226,9 @@ func buildNetworkingDeployment(cctx ControllerContext, resources Resources) *app
 
 	// Pod annotations include secret versions for auto-restart
 	annotations := make(map[string]string)
+	if resources.RPCSecret != nil {
+		maps.Copy(annotations, secretVersionAnnotations("rpc-secret", resources.RPCSecret))
+	}
 	if resources.SwitchConfigSecret != nil {
 		maps.Copy(annotations, secretVersionAnnotations("switch-config", resources.SwitchConfigSecret))
 	}

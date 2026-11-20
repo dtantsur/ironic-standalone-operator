@@ -52,6 +52,7 @@ type ControllerContext struct {
 type Resources struct {
 	Ironic                  *metal3api.Ironic
 	APISecret               *corev1.Secret
+	RPCSecret               *corev1.Secret
 	TLSSecret               *corev1.Secret
 	BMCCASecret             *corev1.Secret
 	BMCCAConfigMap          *corev1.ConfigMap

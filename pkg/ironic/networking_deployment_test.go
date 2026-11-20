@@ -366,8 +366,13 @@ func TestBuildNetworkingDeployment(t *testing.T) {
 			}
 
 			resources := Resources{
-				Ironic:                  tc.Ironic,
-				APISecret:               tc.APISecret,
+				Ironic:    tc.Ironic,
+				APISecret: tc.APISecret,
+				RPCSecret: &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-ironic-rpc-credentials",
+					},
+				},
 				TLSSecret:               tc.TLSSecret,
 				SwitchConfigSecret:      tc.SwitchConfigSecret,
 				SwitchCredentialsSecret: tc.SwitchCredentialsSecret,
@@ -392,6 +397,9 @@ func TestBuildNetworkingDeployment(t *testing.T) {
 
 			// Verify pod annotations include switch config secret version
 			assert.Contains(t, deployment.Spec.Template.Annotations, "ironic.metal3.io/switch-config-version")
+
+			// Verify pod annotations include the RPC secret version
+			assert.Contains(t, deployment.Spec.Template.Annotations, "ironic.metal3.io/rpc-secret-version")
 
 			// Verify TLS secret version annotation when TLS is enabled
 			if tc.ExpectTLSVolume {
@@ -457,8 +465,10 @@ func TestBuildNetworkingDeployment(t *testing.T) {
 			// Networking pod should NOT have ironic-shared or database volumes
 			assert.NotContains(t, volumeMap, "ironic-shared")
 
-			// ironic-auth is required for JSON-RPC authentication
-			assert.Contains(t, volumeMap, "ironic-auth")
+			// ironic-auth is required for JSON-RPC authentication and uses
+			// the dedicated RPC credentials secret
+			assert.Contains(t, volumeMap, ironicAuthVolumeName)
+			assert.Equal(t, "test-ironic-rpc-credentials", volumeMap[ironicAuthVolumeName].Secret.SecretName)
 
 			// Always present: switch-config
 			assert.Contains(t, volumeMap, "switch-config")
@@ -720,7 +730,7 @@ func TestBuildNetworkingContainerEnv(t *testing.T) {
 			NotExpectedEnvs: []string{"IRONIC_INSECURE"},
 		},
 		{
-			Scenario: "API secret present sets IRONIC_HTPASSWD from secret ref",
+			Scenario: "RPC secret sets IRONIC_HTPASSWD from secret ref",
 			Ironic: &metal3api.Ironic{
 				Spec: metal3api.IronicSpec{
 					NetworkingService: &metal3api.NetworkingService{
@@ -739,9 +749,15 @@ func TestBuildNetworkingContainerEnv(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Scenario, func(t *testing.T) {
+			rpcSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-rpc-secret",
+				},
+			}
 			resources := Resources{
 				Ironic:    tc.Ironic,
 				APISecret: tc.APISecret,
+				RPCSecret: rpcSecret,
 				TLSSecret: tc.TLSSecret,
 			}
 
@@ -775,13 +791,13 @@ func TestBuildNetworkingContainerEnv(t *testing.T) {
 				assert.Equal(t, "status.podIP", rpcHostEnv.ValueFrom.FieldRef.FieldPath)
 			}
 
-			// Check IRONIC_HTPASSWD is set from a secret ref
+			// Check IRONIC_HTPASSWD is set from a secret ref to the RPC secret
 			if tc.ExpectHTPasswdFromRef {
 				htpasswdEnv, ok := envVarList["IRONIC_HTPASSWD"]
 				require.True(t, ok, "Expected IRONIC_HTPASSWD env var to be present")
 				require.NotNil(t, htpasswdEnv.ValueFrom, "Expected IRONIC_HTPASSWD to have ValueFrom")
 				require.NotNil(t, htpasswdEnv.ValueFrom.SecretKeyRef, "Expected IRONIC_HTPASSWD to have SecretKeyRef")
-				assert.Equal(t, tc.APISecret.Name, htpasswdEnv.ValueFrom.SecretKeyRef.Name)
+				assert.Equal(t, rpcSecret.Name, htpasswdEnv.ValueFrom.SecretKeyRef.Name)
 				assert.Equal(t, "htpasswd", htpasswdEnv.ValueFrom.SecretKeyRef.Key)
 			}
 		})

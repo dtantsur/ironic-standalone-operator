@@ -580,6 +580,10 @@ func VerifyIronic(ironic *metal3api.Ironic, assumptions TestAssumptions) {
 	if !assumptions.withHA {
 		currentIronicIPs = getCurrentIronicIPs(ctx, ironic.Namespace, ironic.Name)
 	}
+
+	if assumptions.withHA || ironic.IsNetworkingServiceEnabled() {
+		helpers.VerifyRPCSecretExists(ctx, clientset, ironic)
+	}
 	GinkgoWriter.Printf("Ironic detected at the following host IPs: %+v\n", currentIronicIPs)
 	ironicURLs := make([]string, 0, len(currentIronicIPs))
 	for _, ironicIP := range currentIronicIPs {
@@ -1493,6 +1497,7 @@ var _ = Describe("Ironic resource", func() {
 		ironic = WaitForIronic(name)
 		helpers.VerifyNetworkingResourcesGone(ctx, clientset, namespace, name.Name)
 		helpers.VerifySwitchSecretsGone(ctx, clientset, namespace, name.Name)
+		helpers.VerifyRPCSecretGone(ctx, clientset, namespace, name.Name)
 	})
 
 	It("restart networking service on switch config change", Label("networking-restart", "networking"), func() {

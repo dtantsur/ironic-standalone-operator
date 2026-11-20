@@ -85,6 +85,8 @@ func ParseLocalIronic(inputFile string, scheme *runtime.Scheme) (*Resources, err
 			resources.APISecret = secretObj
 		case resources.Ironic.Spec.TLS.CertificateName:
 			resources.TLSSecret = secretObj
+		case rpcCredentialsSecretName(resources.Ironic):
+			resources.RPCSecret = secretObj
 		default:
 			matched := false
 			if bmcCARef != nil && bmcCARef.Kind == metal3api.ResourceKindSecret && bmcCARef.Name == secretObj.Name {
@@ -128,6 +130,16 @@ func ParseLocalIronic(inputFile string, scheme *runtime.Scheme) (*Resources, err
 		apiSecret.GenerateName = ""
 		apiSecret.Name = resources.Ironic.Name + "-api-credentials"
 		resources.APISecret = apiSecret
+	}
+
+	// Generate RPC credentials secret if not provided and the RPC bus is used
+	// (the networking service requires it, HA is not supported locally)
+	if resources.RPCSecret == nil && resources.Ironic.IsNetworkingServiceEnabled() {
+		rpcSecret, err := GenerateRPCSecret(&resources.Ironic.ObjectMeta)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate RPC credentials secret: %w", err)
+		}
+		resources.RPCSecret = rpcSecret
 	}
 
 	return resources, nil
@@ -192,6 +204,9 @@ func GenerateLocalManifests(cctx ControllerContext, resources *Resources) ([]run
 	podTemplate.Spec.Containers = newContainers
 
 	manifests := []runtime.Object{resources.APISecret}
+	if resources.RPCSecret != nil {
+		manifests = append(manifests, resources.RPCSecret)
+	}
 	if resources.TLSSecret != nil {
 		manifests = append(manifests, resources.TLSSecret)
 	}

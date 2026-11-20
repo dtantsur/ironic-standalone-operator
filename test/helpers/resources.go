@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	metal3api "github.com/metal3-io/ironic-standalone-operator/api/v1alpha1"
@@ -92,6 +95,37 @@ func NewAuthSecret(ctx context.Context, k8sClient client.Client, namespace, name
 	err := k8sClient.Create(ctx, secret)
 	Expect(err).NotTo(HaveOccurred())
 	return secret
+}
+
+// VerifyRPCSecretExists verifies that the automatically generated RPC bus
+// credentials secret exists and is not shared with the API credentials.
+func VerifyRPCSecretExists(ctx context.Context, clientset *kubernetes.Clientset, ironic *metal3api.Ironic) {
+	By("verifying the RPC credentials secret")
+
+	rpcSecret, err := clientset.CoreV1().Secrets(ironic.Namespace).Get(ctx, ironic.Name+"-rpc-credentials", metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred())
+
+	Expect(rpcSecret.Labels["ironic.metal3.io/managed"]).To(Equal("true"))
+	Expect(rpcSecret.Labels[metal3api.LabelEnvironmentName]).To(Equal(metal3api.LabelEnvironmentValue))
+	Expect(rpcSecret.Data).To(HaveKey(corev1.BasicAuthUsernameKey))
+	Expect(rpcSecret.Data).To(HaveKey(corev1.BasicAuthPasswordKey))
+	Expect(rpcSecret.Data).To(HaveKey("htpasswd"))
+
+	// The RPC credentials must not be reused from the API credentials
+	apiSecret, err := clientset.CoreV1().Secrets(ironic.Namespace).Get(ctx, ironic.Spec.APICredentialsName, metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(rpcSecret.Data[corev1.BasicAuthPasswordKey]).ToNot(Equal(apiSecret.Data[corev1.BasicAuthPasswordKey]))
+}
+
+// VerifyRPCSecretGone verifies that the RPC credentials secret is cleaned up.
+func VerifyRPCSecretGone(ctx context.Context, clientset *kubernetes.Clientset, namespace, ironicName string) {
+	By("verifying the RPC credentials secret is cleaned up")
+
+	secretName := ironicName + "-rpc-credentials"
+	Eventually(func() bool {
+		_, err := clientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
+		return err != nil && k8serrors.IsNotFound(err)
+	}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(BeTrue())
 }
 
 func NewIronic(ctx context.Context, k8sClient client.Client, nname types.NamespacedName, spec metal3api.IronicSpec) *metal3api.Ironic {
